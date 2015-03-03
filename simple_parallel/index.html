@@ -42,9 +42,8 @@
 
     <section id='main' class="content mod">
 <h1 class='fqn'><span class='in-band'>Crate <a class='mod' href=''>simple_parallel</a><wbr></span><span class='out-of-band'><a href='stability.html'>[stability]</a> <span id='render-detail'>
-            <a id="collapse-all" href="#">[-]
-            </a>&nbsp;<a id="expand-all" href="#">[+]</a>
-        </span><a id='src-0' href='../src/simple_parallel/lib.rs.html#1-180'>[src]</a></span></h1>
+            <a id="collapse-all" href="#">[-]</a>&nbsp;<a id="expand-all" href="#">[+]</a>
+        </span><a id='src-0' href='../src/simple_parallel/lib.rs.html#1-194'>[src]</a></span></h1>
 <div class='docblock'><p>Straight-forward functions and types for basic data parallel
 operations.</p>
 
@@ -55,11 +54,11 @@ but rather explore some ways in which Rust&#39;s type system allows
 for some fairly fancy things to be written with a guarantee of
 safety, all without a garbage collector.</p>
 
-<p>The only dependency is <code>std</code> and there is no <code>unsafe</code> code at all,
-all the parallelism is built directly from the functionality
-provided by <code>std::thread</code> and <code>std::sync</code> and leverages their
-correctness to automatically ensure correctness (at the memory
-safety level).</p>
+<p>The only dependency is <code>std</code> and the basic fucntionality has
+<code>unsafe</code> code at all (the thread pool does use unsafe), all the
+parallelism is built directly from the functionality provided by
+<code>std::thread</code> and <code>std::sync</code> and leverages their correctness to
+automatically ensure correctness (at the memory safety level).</p>
 
 <p>The core design is to simply allow for operations that could occur
 on a single thread to execute on many, it is not intending to
@@ -68,16 +67,22 @@ something (a <code>panic!</code>) would take down the main thread when run
 sequentially, it will also take down the main thread (eventually)
 when run using the functions in this library.</p>
 
-<p>On the point of performance and robust, there&#39;s no thread pooling,
-and so everything essentially spawns a new thread for each
-element, which is definitely suboptimal for many
-reasons. Fortunately, not all is lost, the functionality is
-designed to be as generic as possible, so the iterator functions
-work with many many iterators, e.g. instead of executing a thread
-on every element of a vector individually, a user can divide that
-vector into disjoint sections and spread those across much fewer
-threads (e.g. <a href="http://doc.rust-lang.org/nightly/std/slice/trait.SliceExt.html#tymethod.chunks">the <code>chunks</code>
+<p>On the point of performance and robustness, the top level
+functions do no thread pooling and so everything essentially
+spawns a new thread for each element, which is definitely
+suboptimal for many reasons. Fortunately, not all is lost, the
+functionality is designed to be as generic as possible, so the
+iterator functions work with many many iterators, e.g. instead of
+executing a thread on every element of a vector individually, a
+user can divide that vector into disjoint sections and spread
+those across much fewer threads (e.g. <a href="http://doc.rust-lang.org/nightly/std/slice/trait.SliceExt.html#tymethod.chunks">the <code>chunks</code>
 method</a>).</p>
+
+<p>Further, the thread pooling that does exist has a lot of
+synchronisation overhead, and so is actually rarely a performance
+improvement (although it is a robustness improvement over the
+top-level functions, since it limits the number of threads that
+will be spawned).</p>
 
 <p>Either way, <strong>this is not recommended for general use</strong>. At the
 moment, it is too easy to get resource exhaustion, and crash the
@@ -179,21 +184,19 @@ folder</a>
 contains more intricate example(s), such as a parallel fast
 Fourier transform implementation (it really works, and the
 parallelism does buy something... when tuned).</p>
-</div><h2 id='structs' class='section-header'><a href="#structs">Structs</a></h2>
+</div><h2 id='reexports' class='section-header'><a href="#reexports">Reexports</a></h2>
+<table><tr><td><code>pub use one_to_one::{<a class='fn' href='../simple_parallel/one_to_one/fn.map.html' title='simple_parallel::one_to_one::map'>map</a>, <a class='fn' href='../simple_parallel/one_to_one/fn.unordered_map.html' title='simple_parallel::one_to_one::unordered_map'>unordered_map</a>};</code></td></tr><tr><td><code>pub use pool::<a class='struct' href='../simple_parallel/pool/struct.Pool.html' title='simple_parallel::pool::Pool'>Pool</a>;</code></td></tr></table><h2 id='modules' class='section-header'><a href="#modules">Modules</a></h2>
 <table>
                     <tr>
-                        <td><a class='stability Unmarked' title='No stability level'></a><a class='struct' href='struct.ParMap.html'
-                               title='simple_parallel::ParMap'>ParMap</a></td>
-                        <td class='docblock short'><p>A parallel-mapping iterator.</p>
-</td>
+                        <td><a class='stability Unmarked' title='No stability level'></a><a class='mod' href='one_to_one/index.html'
+                               title='simple_parallel::one_to_one'>one_to_one</a></td>
+                        <td class='docblock short'></td>
                     </tr>
                 
                     <tr>
-                        <td><a class='stability Unmarked' title='No stability level'></a><a class='struct' href='struct.UnorderedParMap.html'
-                               title='simple_parallel::UnorderedParMap'>UnorderedParMap</a></td>
-                        <td class='docblock short'><p>A parallel-mapping iterator that doesn&#39;t care about the order in
-which elements come out.</p>
-</td>
+                        <td><a class='stability Unmarked' title='No stability level'></a><a class='mod' href='pool/index.html'
+                               title='simple_parallel::pool'>pool</a></td>
+                        <td class='docblock short'></td>
                     </tr>
                 </table><h2 id='functions' class='section-header'><a href="#functions">Functions</a></h2>
 <table>
@@ -210,21 +213,6 @@ result.</p>
                                title='simple_parallel::for_'>for_</a></td>
                         <td class='docblock short'><p>Execute <code>f</code> on each element of <code>iter</code>, in their own <code>scoped</code>
 thread.</p>
-</td>
-                    </tr>
-                
-                    <tr>
-                        <td><a class='stability Unmarked' title='No stability level'></a><a class='fn' href='fn.map.html'
-                               title='simple_parallel::map'>map</a></td>
-                        <td class='docblock short'><p>Execute <code>f</code> on <code>iter</code>, yielding the results in the order the
-correspond to in <code>iter</code>.</p>
-</td>
-                    </tr>
-                
-                    <tr>
-                        <td><a class='stability Unmarked' title='No stability level'></a><a class='fn' href='fn.unordered_map.html'
-                               title='simple_parallel::unordered_map'>unordered_map</a></td>
-                        <td class='docblock short'><p>Execute <code>f</code> on each element in <code>iter</code>, with unspecified yield order.</p>
 </td>
                     </tr>
                 </table></section>
