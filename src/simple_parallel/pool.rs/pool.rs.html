@@ -583,11 +583,49 @@
 <span id="541">541</span>
 <span id="542">542</span>
 <span id="543">543</span>
+<span id="544">544</span>
+<span id="545">545</span>
+<span id="546">546</span>
+<span id="547">547</span>
+<span id="548">548</span>
+<span id="549">549</span>
+<span id="550">550</span>
+<span id="551">551</span>
+<span id="552">552</span>
+<span id="553">553</span>
+<span id="554">554</span>
+<span id="555">555</span>
+<span id="556">556</span>
+<span id="557">557</span>
+<span id="558">558</span>
+<span id="559">559</span>
+<span id="560">560</span>
+<span id="561">561</span>
+<span id="562">562</span>
+<span id="563">563</span>
+<span id="564">564</span>
+<span id="565">565</span>
+<span id="566">566</span>
+<span id="567">567</span>
+<span id="568">568</span>
+<span id="569">569</span>
+<span id="570">570</span>
+<span id="571">571</span>
+<span id="572">572</span>
+<span id="573">573</span>
+<span id="574">574</span>
+<span id="575">575</span>
+<span id="576">576</span>
+<span id="577">577</span>
+<span id="578">578</span>
+<span id="579">579</span>
+<span id="580">580</span>
+<span id="581">581</span>
 </pre><pre class='rust '>
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>collections</span>::<span class='ident'>BinaryHeap</span>;
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>iter</span>::<span class='ident'>IntoIterator</span>;
 <span class='kw'>use</span> <span class='ident'>std</span>::{<span class='ident'>marker</span>, <span class='ident'>mem</span>};
-<span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>sync</span>::{<span class='ident'>mpsc</span>, <span class='ident'>atomic</span>};
+<span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>sync</span>::{<span class='ident'>mpsc</span>, <span class='ident'>atomic</span>, <span class='ident'>Mutex</span>, <span class='ident'>Arc</span>};
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>thread</span>;
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>thunk</span>::<span class='ident'>Invoke</span>;
 
@@ -885,57 +923,101 @@
               <span class='ident'>F</span>: <span class='lifetime'>&#39;a</span> <span class='op'>+</span> <span class='ident'>Sync</span> <span class='op'>+</span> <span class='ident'>Fn</span>(<span class='ident'>I</span>::<span class='ident'>Item</span>) <span class='op'>-&gt;</span> <span class='ident'>T</span>,
               <span class='ident'>T</span>: <span class='ident'>Send</span> <span class='op'>+</span> <span class='lifetime'>&#39;a</span>
     {
+        <span class='kw'>let</span> <span class='ident'>nthreads</span> <span class='op'>=</span> <span class='self'>self</span>.<span class='ident'>n_threads</span>;
         <span class='kw'>let</span> (<span class='ident'>needwork_tx</span>, <span class='ident'>needwork_rx</span>) <span class='op'>=</span> <span class='ident'>mpsc</span>::<span class='ident'>channel</span>();
-        <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>work_txs</span> <span class='op'>=</span> <span class='ident'>Vec</span>::<span class='ident'>with_capacity</span>(<span class='self'>self</span>.<span class='ident'>n_threads</span>);
-        <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>work_rxs</span> <span class='op'>=</span> <span class='ident'>Vec</span>::<span class='ident'>with_capacity</span>(<span class='self'>self</span>.<span class='ident'>n_threads</span>);
-        <span class='kw'>for</span> _ <span class='kw'>in</span> <span class='number'>0</span>..<span class='self'>self</span>.<span class='ident'>n_threads</span> {
-            <span class='kw'>let</span> (<span class='ident'>t</span>, <span class='ident'>r</span>) <span class='op'>=</span> <span class='ident'>mpsc</span>::<span class='ident'>channel</span>();
-            <span class='ident'>work_txs</span>.<span class='ident'>push</span>(<span class='ident'>t</span>);
-            <span class='ident'>work_rxs</span>.<span class='ident'>push</span>(<span class='ident'>r</span>);
+        <span class='kw'>let</span> (<span class='ident'>work_tx</span>, <span class='ident'>work_rx</span>) <span class='op'>=</span> <span class='ident'>mpsc</span>::<span class='ident'>channel</span>();
+        <span class='kw'>struct</span> <span class='ident'>Shared</span><span class='op'>&lt;</span><span class='ident'>Chan</span>, <span class='ident'>Atom</span><span class='op'>&gt;</span> {
+            <span class='ident'>work</span>: <span class='ident'>Chan</span>,
+            <span class='ident'>sent</span>: <span class='ident'>Atom</span>,
+            <span class='ident'>finished</span>: <span class='ident'>Atom</span>
         }
-
-        <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>work_rxs</span> <span class='op'>=</span> <span class='ident'>work_rxs</span>.<span class='ident'>into_iter</span>();
+        <span class='kw'>let</span> <span class='ident'>shared</span> <span class='op'>=</span> <span class='ident'>Arc</span>::<span class='ident'>new</span>(<span class='ident'>Shared</span> {
+            <span class='ident'>work</span>: <span class='ident'>Mutex</span>::<span class='ident'>new</span>(<span class='ident'>work_rx</span>),
+            <span class='ident'>sent</span>: <span class='ident'>atomic</span>::<span class='ident'>AtomicUsize</span>::<span class='ident'>new</span>(<span class='number'>0</span>),
+            <span class='ident'>finished</span>: <span class='ident'>atomic</span>::<span class='ident'>AtomicUsize</span>::<span class='ident'>new</span>(<span class='number'>0</span>)
+        });
 
         <span class='kw'>let</span> (<span class='ident'>tx</span>, <span class='ident'>rx</span>) <span class='op'>=</span> <span class='ident'>mpsc</span>::<span class='ident'>channel</span>();
 
+        <span class='kw'>const</span> <span class='ident'>INITIAL_FACTOR</span>: <span class='ident'>usize</span> <span class='op'>=</span> <span class='number'>4</span>;
+        <span class='kw'>const</span> <span class='ident'>BUFFER_FACTOR</span>: <span class='ident'>usize</span> <span class='op'>=</span> <span class='ident'>INITIAL_FACTOR</span> <span class='op'>/</span> <span class='number'>2</span>;
+
         <span class='kw'>let</span> <span class='ident'>handle</span> <span class='op'>=</span> <span class='kw'>unsafe</span> {
-            <span class='self'>self</span>.<span class='ident'>execute</span>(<span class='ident'>needwork_tx</span>,
-                         <span class='kw'>move</span> <span class='op'>|</span><span class='ident'>needwork_tx</span><span class='op'>|</span> {
+            <span class='self'>self</span>.<span class='ident'>execute</span>((<span class='ident'>needwork_tx</span>, <span class='ident'>shared</span>),
+                         <span class='kw'>move</span> <span class='op'>|</span><span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> (<span class='kw-2'>ref</span> <span class='ident'>needwork_tx</span>, <span class='kw-2'>ref</span> <span class='ident'>shared</span>)<span class='op'>|</span> {
                              <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>needwork_tx</span> <span class='op'>=</span> <span class='prelude-val'>Some</span>(<span class='ident'>needwork_tx</span>.<span class='ident'>clone</span>());
-                             <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>work_rx</span> <span class='op'>=</span> <span class='prelude-val'>Some</span>(<span class='ident'>work_rxs</span>.<span class='ident'>next</span>().<span class='ident'>unwrap</span>());
                              <span class='kw'>let</span> <span class='ident'>tx</span> <span class='op'>=</span> <span class='ident'>tx</span>.<span class='ident'>clone</span>();
-                             <span class='kw'>move</span> <span class='op'>|</span><span class='ident'>id</span><span class='op'>|</span> {
-                                 <span class='kw'>let</span> <span class='ident'>work_rx</span> <span class='op'>=</span> <span class='ident'>work_rx</span>.<span class='ident'>take</span>().<span class='ident'>unwrap</span>();
+                             <span class='kw'>let</span> <span class='ident'>shared</span> <span class='op'>=</span> <span class='ident'>shared</span>.<span class='ident'>clone</span>();
+                             <span class='kw'>move</span> <span class='op'>|</span><span class='ident'>_id</span><span class='op'>|</span> {
                                  <span class='kw'>let</span> <span class='ident'>needwork</span> <span class='op'>=</span> <span class='ident'>needwork_tx</span>.<span class='ident'>take</span>().<span class='ident'>unwrap</span>();
                                  <span class='kw'>loop</span> {
-                                     <span class='ident'>needwork</span>.<span class='ident'>send</span>(<span class='ident'>id</span>).<span class='ident'>unwrap</span>();
-                                     <span class='kw'>match</span> <span class='ident'>work_rx</span>.<span class='ident'>recv</span>() {
+                                     <span class='kw'>let</span> <span class='ident'>data</span> <span class='op'>=</span>  {
+                                         <span class='kw'>let</span> <span class='ident'>guard</span> <span class='op'>=</span> <span class='ident'>shared</span>.<span class='ident'>work</span>.<span class='ident'>lock</span>().<span class='ident'>unwrap</span>();
+                                         <span class='ident'>guard</span>.<span class='ident'>recv</span>()
+                                     };
+                                     <span class='kw'>match</span> <span class='ident'>data</span> {
                                          <span class='prelude-val'>Ok</span>(<span class='prelude-val'>Some</span>((<span class='ident'>idx</span>, <span class='ident'>elem</span>))) <span class='op'>=&gt;</span> {
                                              <span class='kw'>let</span> <span class='ident'>data</span> <span class='op'>=</span> <span class='ident'>f</span>(<span class='ident'>elem</span>);
                                              <span class='kw'>let</span> <span class='ident'>status</span> <span class='op'>=</span> <span class='ident'>tx</span>.<span class='ident'>send</span>(<span class='ident'>Packet</span> {
-                                                 <span class='ident'>idx</span>: <span class='ident'>idx</span>, <span class='ident'>data</span>: <span class='prelude-val'>Some</span>(<span class='ident'>data</span>)
+                                                 <span class='ident'>idx</span>: <span class='ident'>idx</span>, <span class='ident'>data</span>: <span class='ident'>data</span>
                                              });
                                              <span class='comment'>// the user disconnected,</span>
                                              <span class='comment'>// so there&#39;s no point</span>
                                              <span class='comment'>// computing more.</span>
                                              <span class='kw'>if</span> <span class='ident'>status</span>.<span class='ident'>is_err</span>() {
+                                                 <span class='kw'>let</span> _ <span class='op'>=</span> <span class='ident'>needwork</span>.<span class='ident'>send</span>(<span class='boolval'>true</span>);
                                                  <span class='kw'>break</span>
                                              }
                                          }
-                                         <span class='prelude-val'>Ok</span>(<span class='prelude-val'>None</span>) <span class='op'>|</span> <span class='prelude-val'>Err</span>(_) <span class='op'>=&gt;</span> <span class='kw'>break</span>
+                                         <span class='prelude-val'>Ok</span>(<span class='prelude-val'>None</span>) <span class='op'>|</span> <span class='prelude-val'>Err</span>(_) <span class='op'>=&gt;</span> {
+                                             <span class='kw'>break</span>
+                                         }
+                                     };
+                                     <span class='kw'>let</span> <span class='ident'>old</span> <span class='op'>=</span>
+                                         <span class='ident'>shared</span>.<span class='ident'>finished</span>.<span class='ident'>fetch_add</span>(<span class='number'>1</span>, <span class='ident'>atomic</span>::<span class='ident'>Ordering</span>::<span class='ident'>SeqCst</span>);
+                                     <span class='kw'>let</span> <span class='ident'>sent</span> <span class='op'>=</span> <span class='ident'>shared</span>.<span class='ident'>sent</span>.<span class='ident'>load</span>(<span class='ident'>atomic</span>::<span class='ident'>Ordering</span>::<span class='ident'>SeqCst</span>);
+
+                                     <span class='kw'>if</span> <span class='ident'>old</span> <span class='op'>+</span> <span class='ident'>BUFFER_FACTOR</span> <span class='op'>*</span> <span class='ident'>nthreads</span> <span class='op'>==</span> <span class='ident'>sent</span> {
+                                         <span class='kw'>if</span> <span class='ident'>needwork</span>.<span class='ident'>send</span>(<span class='boolval'>false</span>).<span class='ident'>is_err</span>() {
+                                             <span class='kw'>break</span>
+                                         }
                                      }
                                  }
                              }
                          },
-                         <span class='kw'>move</span> <span class='op'>|</span><span class='ident'>needwork_tx</span><span class='op'>|</span> {
+                         <span class='kw'>move</span> <span class='op'>|</span>(<span class='ident'>needwork_tx</span>, <span class='ident'>shared</span>)<span class='op'>|</span> {
                              <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>iter</span> <span class='op'>=</span> <span class='ident'>iter</span>.<span class='ident'>into_iter</span>().<span class='ident'>fuse</span>().<span class='ident'>enumerate</span>();
                              <span class='ident'>drop</span>(<span class='ident'>needwork_tx</span>);
+
+                             <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>send_data</span> <span class='op'>=</span> <span class='op'>|</span><span class='ident'>n</span>: <span class='ident'>usize</span><span class='op'>|</span> {
+                                 <span class='ident'>shared</span>.<span class='ident'>sent</span>.<span class='ident'>fetch_add</span>(<span class='ident'>n</span>, <span class='ident'>atomic</span>::<span class='ident'>Ordering</span>::<span class='ident'>SeqCst</span>);
+
+                                 <span class='kw'>for</span> _ <span class='kw'>in</span> <span class='number'>0</span>..<span class='ident'>n</span> {
+                                     <span class='comment'>// TODO: maybe this could instead send</span>
+                                     <span class='comment'>// several elements at a time, to</span>
+                                     <span class='comment'>// reduce the number of</span>
+                                     <span class='comment'>// allocations/atomic operations</span>
+                                     <span class='comment'>// performed.</span>
+                                     <span class='comment'>//</span>
+                                     <span class='comment'>// Downside: work will be</span>
+                                     <span class='comment'>// distributed chunkier.</span>
+                                     <span class='kw'>let</span> _ <span class='op'>=</span> <span class='ident'>work_tx</span>.<span class='ident'>send</span>(<span class='ident'>iter</span>.<span class='ident'>next</span>());
+                                 }
+                             };
+
+
+                             <span class='ident'>send_data</span>(<span class='ident'>INITIAL_FACTOR</span> <span class='op'>*</span> <span class='ident'>nthreads</span>);
+
                              <span class='kw'>loop</span> {
                                  <span class='kw'>match</span> <span class='ident'>needwork_rx</span>.<span class='ident'>recv</span>() {
                                      <span class='comment'>// closed, done!</span>
-                                     <span class='prelude-val'>Err</span>(_) <span class='op'>=&gt;</span> <span class='kw'>break</span>,
-                                     <span class='prelude-val'>Ok</span>(<span class='ident'>id</span>) <span class='op'>=&gt;</span> {
-                                         <span class='ident'>work_txs</span>[<span class='ident'>id</span>.<span class='ident'>n</span>].<span class='ident'>send</span>(<span class='ident'>iter</span>.<span class='ident'>next</span>()).<span class='ident'>unwrap</span>();
+                                     <span class='prelude-val'>Ok</span>(<span class='boolval'>true</span>) <span class='op'>|</span> <span class='prelude-val'>Err</span>(_) <span class='op'>=&gt;</span> <span class='kw'>break</span>,
+                                     <span class='prelude-val'>Ok</span>(<span class='boolval'>false</span>) <span class='op'>=&gt;</span> {
+                                         <span class='comment'>// ignore return, because we</span>
+                                         <span class='comment'>// need to wait until the</span>
+                                         <span class='comment'>// workers have exited (i.e,</span>
+                                         <span class='comment'>// the Err arm above)</span>
+                                         <span class='kw'>let</span> _ <span class='op'>=</span> <span class='ident'>send_data</span>(<span class='ident'>BUFFER_FACTOR</span> <span class='op'>*</span> <span class='ident'>nthreads</span>);
                                      }
                                  }
                              }
@@ -1058,7 +1140,7 @@
 <span class='kw'>struct</span> <span class='ident'>Packet</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span> {
     <span class='comment'>// this should be unique for a given instance of `*ParMap`</span>
     <span class='ident'>idx</span>: <span class='ident'>usize</span>,
-    <span class='ident'>data</span>: <span class='prelude-ty'>Option</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span>,
+    <span class='ident'>data</span>: <span class='ident'>T</span>,
 }
 <span class='kw'>impl</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span> <span class='ident'>PartialOrd</span> <span class='kw'>for</span> <span class='ident'>Packet</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span> {
     <span class='kw'>fn</span> <span class='ident'>partial_cmp</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>other</span>: <span class='kw-2'>&amp;</span><span class='kw'>Self</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Option</span><span class='op'>&lt;</span><span class='ident'>Ordering</span><span class='op'>&gt;</span> { <span class='prelude-val'>Some</span>(<span class='self'>self</span>.<span class='ident'>cmp</span>(<span class='ident'>other</span>)) }
@@ -1084,10 +1166,7 @@
 
     <span class='kw'>fn</span> <span class='ident'>next</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Option</span><span class='op'>&lt;</span>(<span class='ident'>usize</span>, <span class='ident'>T</span>)<span class='op'>&gt;</span> {
         <span class='kw'>match</span> <span class='self'>self</span>.<span class='ident'>rx</span>.<span class='ident'>recv</span>() {
-            <span class='prelude-val'>Ok</span>(<span class='ident'>Packet</span> { <span class='ident'>data</span>: <span class='prelude-val'>Some</span>(<span class='ident'>x</span>), <span class='ident'>idx</span> }) <span class='op'>=&gt;</span> <span class='prelude-val'>Some</span>((<span class='ident'>idx</span>, <span class='ident'>x</span>)),
-            <span class='prelude-val'>Ok</span>(<span class='ident'>Packet</span> { <span class='ident'>data</span>: <span class='prelude-val'>None</span>, .. }) <span class='op'>=&gt;</span> {
-                <span class='macro'>panic</span><span class='macro'>!</span>(<span class='string'>&quot;simple_parallel::unordered_map: closure panicked&quot;</span>)
-            }
+            <span class='prelude-val'>Ok</span>(<span class='ident'>Packet</span> { <span class='ident'>data</span>, <span class='ident'>idx</span> }) <span class='op'>=&gt;</span> <span class='prelude-val'>Some</span>((<span class='ident'>idx</span>, <span class='ident'>data</span>)),
             <span class='prelude-val'>Err</span>(<span class='ident'>mpsc</span>::<span class='ident'>RecvError</span>) <span class='op'>=&gt;</span> <span class='prelude-val'>None</span>,
         }
     }
@@ -1111,10 +1190,7 @@
 
                 <span class='kw'>let</span> <span class='ident'>packet</span> <span class='op'>=</span> <span class='self'>self</span>.<span class='ident'>queue</span>.<span class='ident'>pop</span>().<span class='ident'>unwrap</span>();
                 <span class='self'>self</span>.<span class='ident'>looking_for</span> <span class='op'>+=</span> <span class='number'>1</span>;
-                <span class='kw'>match</span> <span class='ident'>packet</span>.<span class='ident'>data</span> {
-                    <span class='prelude-val'>Some</span>(<span class='ident'>x</span>) <span class='op'>=&gt;</span> <span class='kw'>return</span> <span class='prelude-val'>Some</span>(<span class='ident'>x</span>),
-                    <span class='prelude-val'>None</span> <span class='op'>=&gt;</span> <span class='macro'>panic</span><span class='macro'>!</span>(<span class='string'>&quot;simple_parallel::map: closure panicked&quot;</span>)
-                }
+                <span class='kw'>return</span> <span class='prelude-val'>Some</span>(<span class='ident'>packet</span>.<span class='ident'>data</span>)
             }
             <span class='kw'>match</span> <span class='self'>self</span>.<span class='ident'>unordered</span>.<span class='ident'>rx</span>.<span class='ident'>recv</span>() {
                 <span class='comment'>// this could be optimised to check for `packet.idx ==</span>
