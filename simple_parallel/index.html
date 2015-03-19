@@ -43,7 +43,7 @@
     <section id='main' class="content mod">
 <h1 class='fqn'><span class='in-band'>Crate <a class='mod' href=''>simple_parallel</a><wbr></span><span class='out-of-band'><a href='stability.html'>[stability]</a> <span id='render-detail'>
             <a id="collapse-all" href="#">[-]</a>&nbsp;<a id="expand-all" href="#">[+]</a>
-        </span><a id='src-0' href='../src/simple_parallel/lib.rs.html#1-225'>[src]</a></span></h1>
+        </span><a id='src-0' href='../src/simple_parallel/lib.rs.html#1-237'>[src]</a></span></h1>
 <div class='docblock'><p>Straight-forward functions and types for basic data parallel
 operations.</p>
 
@@ -85,9 +85,20 @@ improvement (although it is a robustness improvement over the
 top-level functions, since it limits the number of threads that
 will be spawned).</p>
 
-<p>Either way, <strong>this is not recommended for general use</strong>. At the
-moment, it is too easy to get resource exhaustion, and crash the
-application, and generally pays a much higher cost than necessary.</p>
+<p>Either way, <strong>this is not recommended for general use</strong>.</p>
+
+<h1 id="usage" class='section-header'><a
+                           href="#usage">Usage</a></h1>
+<p>This is <a href="https://crates.io/crates/simple_parallel">available on
+crates.io</a>. Add this to
+your Cargo.toml:</p>
+
+<pre><code class="language-toml">[dependencies]
+simple_parallel = &quot;0.1&quot;
+</code></pre>
+
+<p>The latest development version can be obtained <a href="https://github.com/huonw/simple_parallel">on
+GitHub</a>.</p>
 
 <h1 id="examples" class='section-header'><a
                            href="#examples">Examples</a></h1>
