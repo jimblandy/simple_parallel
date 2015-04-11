@@ -419,7 +419,7 @@
 <span class='doccomment'>//!</span>
 <span class='doccomment'>//! fn pooled_sum(pool: &amp;mut simple_parallel::Pool, x: &amp;[f64]) -&gt; f64 {</span>
 <span class='doccomment'>//!     let total = Mutex::new(0.0);</span>
-<span class='doccomment'>//!     simple_parallel::for_(x.chunks(ELEMS_PER_JOB), |chunk| {</span>
+<span class='doccomment'>//!     pool.for_(x.chunks(ELEMS_PER_JOB), |chunk| {</span>
 <span class='doccomment'>//!         // sum up this little subsection</span>
 <span class='doccomment'>//!         let subsum = chunk.iter().fold(0.0, |a, b| a + *b);</span>
 <span class='doccomment'>//!         *total.lock().unwrap() += subsum;</span>
